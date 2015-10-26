@@ -2,6 +2,7 @@
 
 import flask
 import pymongo
+from pymongo import ASCENDING
 import sys
 import datetime
 
@@ -9,24 +10,58 @@ from flask import request
 
 app = flask.Flask(__name__)
 
-db = pymongo.Connection().demo
-db.money.ensure_index("ts")
+dbname = "BIGDATASpain"
+db = pymongo.Connection()[dbname]
+db["fiveMinBars"].ensure_index("ts")
+db["minbars"].ensure_index("ts")
 
 
-@app.route("/")
+@app.route("/old")
 def index():
     return flask.render_template("index.html")
 
+@app.route("/")
+@app.route("/min")
+def one():
+    return flask.render_template("fs.html", title="One Minute Chart")
+
+@app.route("/sparked")
+@app.route("/five")
+def five():
+    return flask.render_template("fs.html", title="Five Minute Chart")
+
+@app.route("/fiveticks.json")
+def fiveticks():
+    # Get the page
+    page = int(request.args.get('page', 1))
+    collname = "fiveMinBars"
+    return process_quotes(collname, page)
+
+@app.route("/minticks.json")
+def ticks():
+    # Get the page
+    page = int(request.args.get('page', 1))
+    collname = "minbars"
+    return process_quotes(collname, page)
+
+def process_quotes(collname, page):
+    limit = 150
+    skip = page
+    projection = { '_id': False}
+    quotes = [ format(x, 'Timestamp') for x in db[collname].find({},projection=projection).sort("Timestamp", ASCENDING)
+        .skip(skip).limit(limit)]
+    return JSONEncoder().encode(quotes)
 
 @app.route("/money.json")
 def money():
 
     # Get the page
     page = int(request.args.get('page', 1))
-    limit = 6
+    limit = 9
     skip = page
 
-    candlesticks = db.command("aggregate", "money",
+    """
+    candlesticks = db.command("aggregate", collname,
             pipeline=[
                 {"$project": {
                     "minute": {
@@ -66,8 +101,30 @@ def money():
                     }
                   },
             ])["result"]
+    """
+    pipeline = [
+    { "$project": {
+        "bid": {"open": "$Open", "close": "$Close",
+        "high": "$High", "low": "$Low", "avg": {"$avg": ["$High", "$Low"]} },
+        "ts": "$Timestamp",
+        "_id": "$Timestamp"
+        }
+    },
+    {"$sort": {"ts":1}},
+    {"$skip": skip},
+    {"$limit": limit},
+    ]
+    result = db.minbars.aggregate(pipeline)['result']
+
+    candlesticks = [format(x) for x in result]
+    print candlesticks
     return JSONEncoder().encode(candlesticks)
 
+def format(x, k='_id'):
+    x[k] = datetime.datetime.strptime(x[k], '%Y-%m-%d %H:%M')
+    if k != '_id':
+        x.pop('_id', None)
+    return x
 
 class JSONEncoder(flask.json.JSONEncoder):
     def default(self, obj):

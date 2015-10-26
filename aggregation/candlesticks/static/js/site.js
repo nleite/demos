@@ -14,16 +14,19 @@ var y = d3.scale.linear()
 
 var chart = d3.select("#chart").append("svg")
     .attr("class", "chart")
+    .attr('width', 650)
     .attr("height", h);
+
 
 var page = 0;
 
 function toggle() {
   load_next = (!load_next) ? true : false;
+  var btn = document.getElementById("button");
   if (load_next) {
-    document.getElementById("button").className = "darkblue active";
+    btn.innerHTML = "Stop";
   } else {
-    document.getElementById("button").className = "darkblue";
+    btn.innerHTML = "Start";
   }
   loadNext();
 }
@@ -32,11 +35,13 @@ function loadNext() {
   if (!load_next) {return}
   page += 1;
   d3.json("/money.json?page="+page, redraw);
+
   d3.timer.flush();
 }
 loadNext();
 
 function redraw(data) {
+  //alert(data.length)
   if (data.length < 6) { return }
 
   var bid_data = [];
@@ -44,6 +49,7 @@ function redraw(data) {
   data.forEach(function(d) {
     bid_data.push(d.bid.high, d.bid.low);
   });
+
   all_data = bid_data.sort();
 
   new_min = all_data[0];
